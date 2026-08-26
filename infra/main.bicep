@@ -247,6 +247,10 @@ resource functionApp 'Microsoft.Web/sites@2024-04-01' = {
           value: storageAccount.name
         }
         {
+          name: 'PLAYWRIGHT_BROWSERS_PATH'
+          value: '0'
+        }
+        {
           name: 'FLATFINDER_ANTHROPIC_API_KEY'
           value: anthropicApiKey
         }

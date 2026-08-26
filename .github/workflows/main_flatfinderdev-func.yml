@@ -32,7 +32,14 @@ jobs:
           pushd './${{ env.AZURE_FUNCTIONAPP_PACKAGE_PATH }}'
           dotnet build --configuration Release --output ./output
           popd
-      
+
+      - name: 'Install Playwright Chromium into the package'
+        shell: bash
+        env:
+          PLAYWRIGHT_BROWSERS_PATH: '0'
+        run: |
+          pwsh '${{ env.AZURE_FUNCTIONAPP_PACKAGE_PATH }}/output/playwright.ps1' install chromium
+
       - name: 'Run Azure Functions Action'
         uses: Azure/functions-action@v1
         id: fa
