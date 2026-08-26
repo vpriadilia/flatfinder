@@ -39,7 +39,7 @@ public class AnthropicExtractor(AnthropicClient client) : IExtractor
             description = new
             {
                 type = "string",
-                description = "short English summary of the post"
+                description = "short summary of the post, written in Ukrainian"
             }
         }),
         ["required"] = JsonSerializer.SerializeToElement(new[]
@@ -64,10 +64,10 @@ public class AnthropicExtractor(AnthropicClient client) : IExtractor
                 new MessageParam
                 {
                     Role = Role.User,
-                    Content = 
-                    $"""
-                        Extract structured data from this Facebook housing group post:\n\n{postText}"
-                    """
+                    Content =
+                        "Extract structured data from this Facebook housing group post. " +
+                        "Write the description field in Ukrainian.\n\n" +
+                        postText
                 }
             ],
             OutputConfig = new OutputConfig

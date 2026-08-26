@@ -6,12 +6,10 @@ using Azure.Messaging.ServiceBus;
 using Azure.Monitor.OpenTelemetry.Exporter;
 using Azure.Storage.Blobs;
 using funcs.Abstractions;
-using Microsoft.Azure.Functions.Worker;
 using Microsoft.Azure.Functions.Worker.Builder;
 using Microsoft.Azure.Functions.Worker.OpenTelemetry;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
-using OpenTelemetry;
 using funcs.Services;
 using Microsoft.Extensions.Configuration;
 
@@ -20,9 +18,8 @@ var builder = FunctionsApplication.CreateBuilder(args);
 builder.ConfigureFunctionsWebApplication();
 
 var storageAccountName = builder.Configuration["AzureWebJobsStorage:accountName"];
-var apiKey = builder.Configuration.GetSection("ApiKey").Value;
+var apiKey = Environment.GetEnvironmentVariable("FLATFINDER_ANTHROPIC_API_KEY");
 var tableName = Environment.GetEnvironmentVariable("DEDUPLICATION_TABLE_NAME")!;
-var postsQueueName = Environment.GetEnvironmentVariable("POSTS_QUEUE_NAME")!;
 var credential = new DefaultAzureCredential();
 
 builder.Services.AddSingleton(
@@ -65,9 +62,6 @@ builder.Services.AddSingleton(_ =>
     var serviceBusClient = new ServiceBusClient(fullyQualifiedNamespace, azureCredential);
     return serviceBusClient.CreateSender(queueName);
 });
-
-builder.Services.AddSingleton(
-    sp => sp.GetRequiredService<ServiceBusClient>().CreateSender(postsQueueName));
 
 builder.Services.AddSingleton<IExtractor, AnthropicExtractor>();
 builder.Services.AddSingleton<IDeduplicator, TableDeduplicator>();

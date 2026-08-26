@@ -9,12 +9,24 @@ public class TelegramNotifier(HttpClient httpClient) : INotifier
     private readonly string _botToken = Environment.GetEnvironmentVariable("TELEGRAM_BOT_TOKEN")!;
     private readonly string _chatId = Environment.GetEnvironmentVariable("TELEGRAM_CHAT_ID")!;
 
+    private static readonly Dictionary<string, string> TypeLabelsUk = new(StringComparer.OrdinalIgnoreCase)
+    {
+        ["room"] = "кімната",
+        ["apartment"] = "квартира",
+        ["studio"] = "студія",
+        ["house"] = "будинок",
+        ["other"] = "інше"
+    };
+
     public Task NotifyNewListingAsync(ExtractedPost extracted, string? link) =>
         SendMessageAsync(
-            $"Type: {extracted.Type}\n" +
-            $"Price: {extracted.Price} {extracted.Currency}\n" +
+            $"Тип: {ToUkrainianType(extracted.Type)}\n" +
+            $"Ціна: {extracted.Price} {extracted.Currency}\n" +
             $"{extracted.Description}\n" +
             $"{link}");
+
+    private static string ToUkrainianType(string? type) =>
+        type is not null && TypeLabelsUk.TryGetValue(type, out var label) ? label : type ?? "не вказано";
 
     public async Task SendMessageAsync(string text)
     {

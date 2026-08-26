@@ -1,21 +1,68 @@
 targetScope = 'resourceGroup'
 
+
+@description('The name of the resource group where the resources will be deployed.')
+param resourceGroupName string
+
+@description('The subscription ID where the resources will be deployed.')
+param subscriptionId string 
+
+@description('The name of the Key Vault where the secrets will be stored.')
+param keyVaultName string
+
+@description('The name of the secret in Key Vault that contains the Anthropic API key.')
 param location string = resourceGroup().location
 
+@description('The name of the secret in Key Vault that contains the Telegram bot token.')
 param storageAccountName string = 'flatfinderdevsa'
 
+@description('The name of the secret in Key Vault that contains the Telegram chat ID.')
 param blobServiceName string = 'default'
+
+@description('The name of the secret in Key Vault that contains the Telegram chat ID.')
 param tableServiceName string = 'default'
 
+@description('The name of the secret in Key Vault that contains the Telegram chat ID.')
 param deploymentContainerName string = 'deployment'
+
+@description('The name of the secret in Key Vault that contains the Telegram chat ID.')
 param statesContainerName string = 'states'
+
+@description('The name of the secret in Key Vault that contains the Telegram chat ID.')
 param configContainerName string = 'config'
+
+@description('The name of the secret in Key Vault that contains the Telegram chat ID.')
 param seenPostsTableName string = 'flatfinderseenposts'
 
+@description('The name of the secret in Key Vault that contains the Telegram chat ID.')
 param serviceBusNamespaceName string = 'flatfinder-dev-sbns'
+
+@description('The name of the secret in Key Vault that contains the Telegram chat ID.')
 param serviceBusQueueName string = 'flatfinder-dev-sbq'
 
+@description('The name of the secret in Key Vault that contains the Telegram chat ID.')
 param functionUserManagedIdentityName string = 'flatfinderdev-func-identity'
+
+@description('The name of the secret in Key Vault that contains the Telegram chat ID.')
+param appServicePlanName string = 'flatfinderdev-func-asp1'
+
+@description('The name of the secret in Key Vault that contains the Telegram chat ID.')
+param functionAppName string = 'flatfinderdev-func'
+
+@description('The name of the Application Insights resource to create.')
+param appInsightsName string = 'flatfinderdev-ai'
+
+@description('The Api key for Anthropic API, stored as a secret in Key Vault.')
+@secure()
+param anthropicApiKey string
+
+@description('The Telegram bot token, stored as a secret in Key Vault.')
+@secure()
+param telegramBotToken string
+
+@description('The Telegram chat ID, stored as a secret in Key Vault.')
+@secure()
+param telegramChatId string
 
 resource storageAccount 'Microsoft.Storage/storageAccounts@2022-09-01' = {
   name: storageAccountName
@@ -97,6 +144,11 @@ resource queue 'Microsoft.ServiceBus/namespaces/queues@2021-06-01-preview' = {
   }
 }
 
+// existing key vault
+resource keyVault 'Microsoft.KeyVault/vaults@2022-07-01' existing = {
+  name: keyVaultName
+}
+
 resource functionUserManagedIdentity 'Microsoft.ManagedIdentity/userAssignedIdentities@2023-01-31' = {
   name: functionUserManagedIdentityName
   location: location
@@ -131,3 +183,135 @@ resource serviceBusRoleAssignmentReceiver 'Microsoft.Authorization/roleAssignmen
     principalType: 'ServicePrincipal'
   }
 }
+
+resource keyVaultRoleAssignment 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
+  name: guid(functionUserManagedIdentity.id, keyVault.id, 'Key Vault Secrets User')
+  scope: keyVault
+  properties: {
+    roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', '4633458b-17de-408a-b874-0445c86b69e6')
+    principalId: functionUserManagedIdentity.properties.principalId
+    principalType: 'ServicePrincipal'
+  }
+}
+
+resource appInsightsComponents 'Microsoft.Insights/components@2020-02-02' = {
+  name: appInsightsName
+  location: location
+  kind: 'web'
+  properties: {
+    Application_Type: 'web'
+    DisableIpMasking: false
+    DisableLocalAuth: false
+    ForceCustomerStorageForProfiler: false
+    RetentionInDays: 90
+    SamplingPercentage: 100
+    publicNetworkAccessForIngestion: 'Enabled'
+    publicNetworkAccessForQuery: 'Enabled'
+  }
+}
+
+resource appServicePlan 'Microsoft.Web/serverfarms@2024-04-01' = {
+  name: appServicePlanName
+  location: location
+  kind: 'functionapp'
+  sku: {
+    tier: 'FlexConsumption'
+    name: 'FC1'
+  }
+  properties: {
+    reserved: true
+  }
+}
+
+resource functionApp 'Microsoft.Web/sites@2024-04-01' = {
+  name: functionAppName
+  location: location
+  kind: 'functionapp,linux'
+  identity: {
+    type: 'UserAssigned'
+    userAssignedIdentities: {
+      '${functionUserManagedIdentity.id}': {}
+    }
+  }
+  properties: {
+    serverFarmId: appServicePlan.id
+    httpsOnly: true
+    siteConfig: {
+      appSettings: [
+        {
+          name: 'APPLICATIONINSIGHTS_CONNECTION_STRING'
+          value: appInsightsComponents.properties.ConnectionString
+        }
+        {
+          name: 'AzureWebJobsStorage__accountName'
+          value: storageAccount.name
+        }
+        {
+          name: 'FLATFINDER_ANTHROPIC_API_KEY'
+          value: anthropicApiKey
+        }
+        {
+          name: 'TELEGRAM_BOT_TOKEN'
+          value: telegramBotToken
+        }
+        {
+          name: 'TELEGRAM_CHAT_ID'
+          value: telegramChatId
+        }
+        {
+          name: 'ServiceBusConnection__queueName'
+          value: serviceBusQueueName
+        }
+        {
+          name: 'ServiceBusConnection__fullyQualifiedNamespace'
+          value: namespace.properties.serviceBusEndpoint
+        }
+        {
+          name: 'FACEBOOK_STATE_BLOB_CONTAINER'
+          value: statesContainerName
+        }
+        {
+          name: 'FACEBOOK_STATE_BLOB_NAME'
+          value: 'state.json'
+        }
+        {
+          name: 'SCRAPER_CONFIG_BLOB_CONTAINER'
+          value: configContainerName
+        }
+        {
+          name: 'SCRAPER_CONFIG_BLOB_NAME'
+          value: 'scraper-config.json'
+        }
+        {
+          name: 'DEDUPLICATION_PARTITION_KEY'
+          value: seenPostsTableName
+        }
+        {
+          name: 'DEDUPLICATION_TABLE_NAME'
+          value: seenPostsTableName
+        }
+      ]
+    }
+    functionAppConfig: {
+      scaleAndConcurrency: {
+        instanceMemoryMB: 512
+        maximumInstanceCount: 10
+      }
+      deployment: {
+        storage: {
+          type: 'blobContainer'
+          value: '${storageAccount.properties.primaryEndpoints.blob}${deploymentContainerName}'
+          authentication: {
+            type: 'UserAssignedIdentity'
+            userAssignedIdentityResourceId: functionUserManagedIdentity.id
+          }
+        }
+      }
+      runtime: {
+        name: 'dotnet-isolated'
+        version: '10.0'
+      }
+    }
+  }
+}
+

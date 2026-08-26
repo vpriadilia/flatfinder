@@ -1,3 +1,4 @@
+using System.Text;
 using System.Text.Json;
 using Azure;
 using Azure.Storage.Blobs;
@@ -22,7 +23,8 @@ public class BlobScraperConfigProvider(BlobServiceClient blobServiceClient, ILog
 
     public async Task<ScraperConfig> GetConfigAsync(CancellationToken ct = default)
     {
-        var blobClient = blobServiceClient.GetBlobContainerClient(_containerName).GetBlobClient(_blobName);
+        var containerClient = blobServiceClient.GetBlobContainerClient(_containerName);
+        var blobClient = containerClient.GetBlobClient(_blobName);
         try
         {
             var response = await blobClient.DownloadContentAsync(ct);
@@ -35,10 +37,32 @@ public class BlobScraperConfigProvider(BlobServiceClient blobServiceClient, ILog
         catch (RequestFailedException ex) when (ex.Status == 404)
         {
             logger.LogWarning(
-                "Scraper config blob not found at {Container}/{Blob}; falling back to default config",
+                "Scraper config blob not found at {Container}/{Blob}; seeding it with the default config",
                 _containerName,
                 _blobName);
+            await SeedDefaultConfigAsync(containerClient, blobClient, ct);
             return DefaultConfig;
+        }
+    }
+
+    private static async Task SeedDefaultConfigAsync(BlobContainerClient containerClient, BlobClient blobClient, CancellationToken ct)
+    {
+        await containerClient.CreateIfNotExistsAsync(cancellationToken: ct);
+
+        var json = JsonSerializer.Serialize(DefaultConfig, new JsonSerializerOptions
+        {
+            WriteIndented = true,
+            PropertyNamingPolicy = JsonNamingPolicy.CamelCase
+        });
+
+        await using var stream = new MemoryStream(Encoding.UTF8.GetBytes(json));
+        try
+        {
+            await blobClient.UploadAsync(stream, overwrite: false, cancellationToken: ct);
+        }
+        catch (RequestFailedException ex) when (ex.Status == 409)
+        {
+            // another instance already seeded it concurrently — nothing to do.
         }
     }
 }

@@ -16,7 +16,7 @@ public class FacebookScrapperTimer(
 {
     [Function("FacebookScrapperTimer")]
     public async Task Run(
-        [TimerTrigger("*/120 * * * * *")]
+        [TimerTrigger("*/60 * * * * *")]
         TimerInfo myTimer)
     {
         var config = await configProvider.GetConfigAsync();

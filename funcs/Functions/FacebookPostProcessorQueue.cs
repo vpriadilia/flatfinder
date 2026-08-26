@@ -15,7 +15,8 @@ public class FacebookPostProcessorQueue(
 {
     [Function(nameof(FacebookPostProcessorQueue))]
     public async Task Run(
-        [ServiceBusTrigger("%POSTS_QUEUE_NAME%", Connection = "ServiceBusConnection")]
+        [ServiceBusTrigger("%ServiceBusConnection:queueName%", 
+            Connection = "ServiceBusConnection")]
         ServiceBusReceivedMessage message)
     {
         var post = JsonSerializer.Deserialize<RawPost>(message.Body.ToString(), new JsonSerializerOptions
