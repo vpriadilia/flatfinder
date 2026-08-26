@@ -2,22 +2,15 @@ using System.Text.Json;
 using Anthropic;
 using Anthropic.Models.Messages;
 using funcs.Abstractions;
-using Microsoft.Extensions.Logging;
+using funcs.Models;
 
 namespace funcs.Services;
-
-public record ExtractedPost(
-    bool IsOffering,
-    string? Type,
-    decimal? Price,
-    string? Currency,
-    string Description);
 
 public class AnthropicExtractor(AnthropicClient client) : IExtractor
 {
     private readonly string _model = Environment.GetEnvironmentVariable("ANTHROPIC_MODEL")!;
     private readonly int _maxTokens = int.Parse(Environment.GetEnvironmentVariable("ANTHROPIC_MAX_TOKENS")!);
-    
+
     private static readonly Dictionary<string, JsonElement> Schema = new()
     {
         ["type"] = JsonSerializer.SerializeToElement("object"),
@@ -51,10 +44,10 @@ public class AnthropicExtractor(AnthropicClient client) : IExtractor
         }),
         ["required"] = JsonSerializer.SerializeToElement(new[]
         {
-            "isOffering", 
-            "type", 
-            "price", 
-            "currency", 
+            "isOffering",
+            "type",
+            "price",
+            "currency",
             "description"
         }),
         ["additionalProperties"] = JsonSerializer.SerializeToElement(false)
@@ -71,7 +64,10 @@ public class AnthropicExtractor(AnthropicClient client) : IExtractor
                 new MessageParam
                 {
                     Role = Role.User,
-                    Content = $"Extract structured data from this Facebook housing group post:\n\n{postText}"
+                    Content = 
+                    $"""
+                        Extract structured data from this Facebook housing group post:\n\n{postText}"
+                    """
                 }
             ],
             OutputConfig = new OutputConfig

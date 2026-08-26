@@ -1,5 +1,11 @@
 using Anthropic;
+using Azure.Core;
+using Azure.Data.Tables;
+using Azure.Identity;
+using Azure.Messaging.ServiceBus;
 using Azure.Monitor.OpenTelemetry.Exporter;
+using Azure.Storage.Blobs;
+using funcs.Abstractions;
 using Microsoft.Azure.Functions.Worker;
 using Microsoft.Azure.Functions.Worker.Builder;
 using Microsoft.Azure.Functions.Worker.OpenTelemetry;
@@ -7,46 +13,70 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using OpenTelemetry;
 using funcs.Services;
+using Microsoft.Extensions.Configuration;
 
 var builder = FunctionsApplication.CreateBuilder(args);
 
 builder.ConfigureFunctionsWebApplication();
 
+var storageAccountName = builder.Configuration["AzureWebJobsStorage:accountName"];
 var apiKey = builder.Configuration.GetSection("ApiKey").Value;
 var tableName = Environment.GetEnvironmentVariable("DEDUPLICATION_TABLE_NAME")!;
+var postsQueueName = Environment.GetEnvironmentVariable("POSTS_QUEUE_NAME")!;
+var credential = new DefaultAzureCredential();
 
-// var accountName = configuration["AzureWebJobsStorage:accountName"];
-// var serviceClient = new TableServiceClient(
-//     new Uri($"https://{accountName}.table.core.windows.net"),
-//     new DefaultAzureCredential());
-
-builder.Services.AddScoped(
+builder.Services.AddSingleton(
     _ => new AnthropicClient
     {
         ApiKey = apiKey
     });
 
-builder.Services.AddScoped(
-    _ => new Azure.Data.Tables.TableClient(
-        Environment.GetEnvironmentVariable("AzureWebJobsStorage")!,
+builder.Services.AddSingleton(
+    _ => new TableClient(
+        new Uri($"https://{storageAccountName}.table.core.windows.net"),
         tableName,
-        new Azure.Data.Tables.TableClientOptions
+        credential,
+        new TableClientOptions
         {
             Retry =
             {
-                Mode = Azure.Core.RetryMode.Exponential,
+                Mode = RetryMode.Exponential,
                 Delay = TimeSpan.FromSeconds(1),
                 MaxDelay = TimeSpan.FromSeconds(30),
                 MaxRetries = 5
             }
         }));
 
+builder.Services.AddSingleton(
+    _ => new BlobServiceClient(
+        new Uri($"https://{storageAccountName}.blob.core.windows.net"),
+        credential));
 
-builder.Services.AddSingleton<AnthropicExtractor>();
-builder.Services.AddSingleton<TableDeduplicator>();
+var fullyQualifiedNamespace = builder.Configuration.GetValue<string>("ServiceBusConnection:fullyQualifiedNamespace");
+var queueName = builder.Configuration.GetValue<string>("ServiceBusConnection:queueName");
+var userManagedClientId = builder.Configuration.GetValue<string>("ServiceBusConnection:clientId");
+builder.Services.AddSingleton(_ =>
+{
+    var credentialOptions = new DefaultAzureCredentialOptions
+    {
+        ManagedIdentityClientId = userManagedClientId
+    };
+    var azureCredential = new DefaultAzureCredential(credentialOptions);
+    var serviceBusClient = new ServiceBusClient(fullyQualifiedNamespace, azureCredential);
+    return serviceBusClient.CreateSender(queueName);
+});
+
+builder.Services.AddSingleton(
+    sp => sp.GetRequiredService<ServiceBusClient>().CreateSender(postsQueueName));
+
+builder.Services.AddSingleton<IExtractor, AnthropicExtractor>();
+builder.Services.AddSingleton<IDeduplicator, TableDeduplicator>();
+builder.Services.AddSingleton<IFacebookSessionStateStore, BlobFacebookSessionStateStore>();
+builder.Services.AddSingleton<IScraperConfigProvider, BlobScraperConfigProvider>();
+builder.Services.AddSingleton<IPostBatchPublisher, ServiceBusPostPublisher>();
+builder.Services.AddScoped<IPostScraper, PlaywrightPostScraper>();
 builder.Services.AddHttpClient<TelegramNotifier>();
-
-
+builder.Services.AddScoped<INotifier>(sp => sp.GetRequiredService<TelegramNotifier>());
 
 if (!string.IsNullOrEmpty(Environment.GetEnvironmentVariable("APPLICATIONINSIGHTS_CONNECTION_STRING")))
 {

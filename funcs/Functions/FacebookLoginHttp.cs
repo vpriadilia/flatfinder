@@ -1,3 +1,4 @@
+using funcs.Abstractions;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Azure.Functions.Worker;
@@ -5,10 +6,8 @@ using Microsoft.Playwright;
 
 namespace funcs.Functions;
 
-public class FacebookLoginHttp
+public class FacebookLoginHttp(IFacebookSessionStateStore stateStore)
 {
-    private readonly string _stateFilePath = Environment.GetEnvironmentVariable("FACEBOOK_STATE_FILE_PATH")!;
-
     [Function("FacebookLogin")]
     public async Task<IActionResult> Run(
         [HttpTrigger(AuthorizationLevel.Anonymous, "get")] HttpRequest req)
@@ -30,13 +29,9 @@ public class FacebookLoginHttp
 
         await tcs.Task;
 
-        await context.StorageStateAsync(
-            new BrowserContextStorageStateOptions
-            {
-                Path = _stateFilePath
-            });
+        var stateJson = await context.StorageStateAsync();
+        await stateStore.SaveStateAsync(stateJson);
 
-        return new OkObjectResult(
-            $"Session state saved to {_stateFilePath}");
+        return new OkObjectResult("Facebook session state saved to blob storage");
     }
 }

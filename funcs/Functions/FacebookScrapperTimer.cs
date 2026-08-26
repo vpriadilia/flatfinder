@@ -1,119 +1,66 @@
-﻿using System.Text.RegularExpressions;
+using funcs.Abstractions;
+using funcs.Exceptions;
+using funcs.Models;
 using Microsoft.Azure.Functions.Worker;
 using Microsoft.Extensions.Logging;
-using Microsoft.Playwright;
-using funcs.Services;
 
 namespace funcs.Functions;
 
 public class FacebookScrapperTimer(
     ILogger<FacebookScrapperTimer> logger,
-    AnthropicExtractor anthropicExtractor,
-    TableDeduplicator tableDeduplicator,
-    TelegramNotifier telegramNotifier)
+    IPostScraper postScraper,
+    IDeduplicator deduplicator,
+    IPostBatchPublisher publisher,
+    IScraperConfigProvider configProvider,
+    INotifier notifier)
 {
-    private readonly string _stateFilePath = Environment.GetEnvironmentVariable("FACEBOOK_STATE_FILE_PATH")!;
-
     [Function("FacebookScrapperTimer")]
     public async Task Run(
-        [TimerTrigger("*/30 * * * * *")]
+        [TimerTrigger("*/120 * * * * *")]
         TimerInfo myTimer)
     {
-        if (!File.Exists(_stateFilePath))
+        var config = await configProvider.GetConfigAsync();
+        if (config.Groups is not { Length: > 0 })
         {
-            logger.LogWarning(
-                "Facebook session state not found at {Path}. Call the FacebookLogin HTTP function once to create it.",
-                _stateFilePath);
+            logger.LogWarning("No Facebook groups configured to monitor; skipping this run");
             return;
         }
-        
-        using var playwright = await Playwright.CreateAsync();
-        await using var browser = await playwright.Chromium.LaunchAsync(
-            new BrowserTypeLaunchOptions
-            {
-                Headless = true
-            });
-        await using var context = await browser.NewContextAsync(new BrowserNewContextOptions
+
+        IReadOnlyList<RawPost> posts;
+        try
         {
-            StorageStatePath = _stateFilePath
-        });
-        var page = await context.NewPageAsync();
-        await page.GotoAsync(
-            "https://www.facebook.com/groups/807812386001622",
-            new PageGotoOptions
-            {
-                WaitUntil = WaitUntilState.DOMContentLoaded
-            });
-        await page.WaitForTimeoutAsync(5000);
-        
-        var posts = page.Locator("[role='article']");
-        var count = await posts.CountAsync();
-        
-        logger.LogInformation("Found {Count} posts in the group", count);
-        var seeMoreButton = new Regex("Більше|See more|Show more|Zobraziť viac", RegexOptions.IgnoreCase);
-
-        for (var i = 0; i < count; i++)
-        {
-            var post = posts.Nth(i);
-
-            var seeMore = post.GetByText(seeMoreButton);
-            if (await seeMore.CountAsync() > 0)
-            {
-                try
-                {
-                    await seeMore.First.ClickAsync();
-                }
-                catch
-                {
-                    // ignore — text may already be expanded or the button detached
-                }
-            }
-
-            var text = await post.InnerTextAsync();
-            var link = await GetPostLinkAsync(post);
-
-            var hash = TableDeduplicator.Hash(link ?? text);
-            if (await tableDeduplicator.IsSeenAsync(hash))
-            {
-                continue;
-            }
-
-            var extracted = await anthropicExtractor.ExtractAsync(text);
-
-            logger.LogInformation(
-                "POST {Index}: offering={IsOffering} type={Type} price={Price} {Currency} link={Link}\n{Description}",
-                i,
-                extracted?.IsOffering,
-                extracted?.Type,
-                extracted?.Price,
-                extracted?.Currency,
-                extracted?.Description,
-                link);
-
-            if (extracted is { IsOffering: true })
-            {
-                await telegramNotifier.SendMessageAsync(
-                    $"Type: {extracted.Type}\n" +
-                    $"Price: {extracted.Price} {extracted.Currency}\n" +
-                    $"{extracted.Description}\n" +
-                    $"{link}");
-            }
-
-            await tableDeduplicator.MarkSeenAsync(hash);
+            posts = await postScraper.ScrapePostsAsync(config.Groups);
         }
-    }
-
-    private static async Task<string?> GetPostLinkAsync(ILocator post)
-    {
-        var link = post.Locator("a[href*='/posts/'], a[href*='/permalink/']").First;
-        if (await link.CountAsync() == 0)
+        catch (FacebookSessionInvalidException ex)
         {
-            return null;
+            logger.LogWarning(ex, "Skipping this run because the Facebook session is invalid or expired");
+            await notifier.SendMessageAsync(
+                "Facebook session expired or missing — call the FacebookLogin function to log in again.");
+            return;
         }
 
-        var href = await link.GetAttributeAsync("href");
-        return href is null
-            ? null
-            : new Uri(new Uri("https://www.facebook.com"), href).GetLeftPart(UriPartial.Path);
+        logger.LogInformation("Found {Count} posts across {GroupCount} groups", posts.Count, config.Groups.Length);
+
+        var newPosts = new List<RawPost>();
+        foreach (var post in posts)
+        {
+            if (!await deduplicator.IsSeenAsync(post.Hash))
+            {
+                newPosts.Add(post);
+            }
+        }
+
+        if (newPosts.Count == 0)
+        {
+            return;
+        }
+
+        logger.LogInformation("Publishing {Count} new posts to Service Bus", newPosts.Count);
+        await publisher.PublishAsync(newPosts);
+
+        foreach (var post in newPosts)
+        {
+            await deduplicator.MarkSeenAsync(post.Hash);
+        }
     }
 }
