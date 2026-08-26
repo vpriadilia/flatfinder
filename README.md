@@ -1,4 +1,4 @@
-<img width="670" height="377" alt="image" src="https://github.com/user-attachments/assets/be02319e-00ea-498d-8481-f6e297cbe79f" />
+<img width="1134" height="826" alt="image" src="https://github.com/user-attachments/assets/b608e949-98b7-4673-87f0-73a09ac639b7" />
 
 resource group: flatfinder-dev-rg
 
