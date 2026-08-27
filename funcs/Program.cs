@@ -20,7 +20,10 @@ builder.ConfigureFunctionsWebApplication();
 var storageAccountName = builder.Configuration["AzureWebJobsStorage:accountName"];
 var apiKey = Environment.GetEnvironmentVariable("FLATFINDER_ANTHROPIC_API_KEY");
 var tableName = Environment.GetEnvironmentVariable("DEDUPLICATION_TABLE_NAME")!;
-var credential = new DefaultAzureCredential();
+var credential = new DefaultAzureCredential(new DefaultAzureCredentialOptions
+{
+    ManagedIdentityClientId = builder.Configuration["AzureWebJobsStorage:clientId"]
+});
 
 builder.Services.AddSingleton(
     _ => new AnthropicClient
