@@ -138,7 +138,7 @@ module functionApp 'modules/functionApp.bicep' = {
     appInsightsConnectionString: monitoring.outputs.appInsightsConnectionString
     storageAccountName: storage.outputs.name
     serviceBusQueueName: serviceBus.outputs.queueName
-    serviceBusEndpoint: serviceBus.outputs.serviceBusEndpoint
+    serviceBusEndpoint: serviceBus.outputs.fullyQualifiedNamespace
     statesContainerName: statesContainerName
     configContainerName: configContainerName
     seenPostsTableName: seenPostsTableName

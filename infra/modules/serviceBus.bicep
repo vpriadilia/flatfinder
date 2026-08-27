@@ -69,4 +69,6 @@ resource serviceBusRoleAssignmentReceiver 'Microsoft.Authorization/roleAssignmen
 
 output name string = namespace.name
 output queueName string = queue.name
-output serviceBusEndpoint string = namespace.properties.serviceBusEndpoint
+// Bare hostname, not namespace.properties.serviceBusEndpoint (which returns "https://<name>.servicebus.windows.net:443/") -
+// the Functions Service Bus extension's identity-based connection expects just the hostname for fullyQualifiedNamespace.
+output fullyQualifiedNamespace string = '${serviceBusNamespaceName}.servicebus.windows.net'
