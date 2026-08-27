@@ -9,7 +9,6 @@ param deploymentContainerName = 'deployment'
 param statesContainerName = 'states'
 param configContainerName = 'config'
 param seenPostsTableName = 'flatfinderseenposts'
-
 param serviceBusNamespaceName = 'flatfinder-dev-sbns'
 param serviceBusQueueName = 'flatfinder-dev-sbq'
 
