@@ -1,7 +1,5 @@
 using 'main.bicep'
 
-
-
 param storageAccountName = 'flatfinderdevsa'
 param blobServiceName = 'default'
 param tableServiceName = 'default'

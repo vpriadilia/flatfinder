@@ -13,5 +13,11 @@ ENV FUNCTIONS_WORKER_RUNTIME=dotnet-isolated
 COPY --from=installer-env ["/home/site/wwwroot", "/home/site/wwwroot"]
 
 RUN apt-get update \
-    && bash /home/site/wwwroot/playwright.sh install --with-deps chromium \
+    && apt-get install -y --no-install-recommends wget ca-certificates \
+    && wget -q https://packages.microsoft.com/config/ubuntu/24.04/packages-microsoft-prod.deb -O /tmp/packages-microsoft-prod.deb \
+    && dpkg -i /tmp/packages-microsoft-prod.deb \
+    && rm /tmp/packages-microsoft-prod.deb \
+    && apt-get update \
+    && apt-get install -y powershell \
+    && pwsh /home/site/wwwroot/playwright.ps1 install --with-deps chromium \
     && rm -rf /var/lib/apt/lists/*
