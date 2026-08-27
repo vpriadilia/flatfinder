@@ -15,7 +15,6 @@ param containerAppsEnvironmentName = 'flatfinderdev-cae'
 param containerRegistryName = 'flatfinderdevacr'
 param containerImageName = 'flatfinder-func'
 param imageTag = 'latest'
-
 param appInsightsName = 'flatfinderdev-ai'
 param logAnalyticsWorkspaceName = 'flatfinderdev-law'
 
