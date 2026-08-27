@@ -15,6 +15,7 @@ param principalId string
 
 var identityId = resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', functionUserManagedIdentityName)
 
+
 resource namespace 'Microsoft.ServiceBus/namespaces@2022-01-01-preview' = {
   name: serviceBusNamespaceName
   location: location
