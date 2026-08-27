@@ -1,7 +1,13 @@
-# Docs for the Azure Web Apps Deploy action: https://github.com/azure/functions-action
-# More GitHub Actions for Azure: https://github.com/Azure/actions
+# Builds a container image (bundling the Chromium binary + its native OS deps, since
+# Playwright can't run on Flex Consumption's managed runtime), pushes it to Azure Container
+# Registry, and redeploys the infra so the Function App (hosted on Azure Container Apps) picks
+# up the new image tag.
+#
+# Requires these repo secrets (federated/OIDC login, no client secret needed):
+#   AZURE_CLIENT_ID, AZURE_TENANT_ID, AZURE_SUBSCRIPTION_ID
+# See: https://github.com/Azure/login#login-with-openid-connect-oidc-recommended
 
-name: Build and deploy dotnet core project to Azure Function App - flatfinderdev-func
+name: Build and deploy container to Azure Function App - flatfinderdev-func
 
 on:
   push:
@@ -10,43 +16,45 @@ on:
   workflow_dispatch:
 
 env:
-  AZURE_FUNCTIONAPP_PACKAGE_PATH: 'funcs' # set this to the path to your web app project, defaults to the repository root
-  DOTNET_VERSION: '10.0' # set this to the dotnet version to use
+  FUNCTIONAPP_PROJECT_PATH: 'funcs'
+  RESOURCE_GROUP: 'flatfinder-dev-rg'
+  CONTAINER_REGISTRY_NAME: 'flatfinderdevacr'
+  CONTAINER_REGISTRY_LOGIN_SERVER: 'flatfinderdevacr.azurecr.io'
+  IMAGE_NAME: 'flatfinder-func'
+
+permissions:
+  id-token: write
+  contents: read
 
 jobs:
   build-and-deploy:
     runs-on: ubuntu-latest
-    
+
     steps:
       - name: 'Checkout GitHub Action'
         uses: actions/checkout@v4
 
-      - name: Setup DotNet ${{ env.DOTNET_VERSION }} Environment
-        uses: actions/setup-dotnet@v1
+      - name: 'Azure login (OIDC)'
+        uses: azure/login@v2
         with:
-          dotnet-version: ${{ env.DOTNET_VERSION }}
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
 
-      - name: 'Resolve Project Dependencies Using Dotnet'
-        shell: bash
+      - name: 'Log in to Azure Container Registry'
+        run: az acr login --name ${{ env.CONTAINER_REGISTRY_NAME }}
+
+      - name: 'Build and push container image'
         run: |
-          pushd './${{ env.AZURE_FUNCTIONAPP_PACKAGE_PATH }}'
-          dotnet build --configuration Release --output ./output
-          popd
+          docker build \
+            --tag ${{ env.CONTAINER_REGISTRY_LOGIN_SERVER }}/${{ env.IMAGE_NAME }}:${{ github.sha }} \
+            ${{ env.FUNCTIONAPP_PROJECT_PATH }}
+          docker push ${{ env.CONTAINER_REGISTRY_LOGIN_SERVER }}/${{ env.IMAGE_NAME }}:${{ github.sha }}
 
-      - name: 'Install Playwright Chromium into the package'
-        shell: bash
-        env:
-          PLAYWRIGHT_BROWSERS_PATH: '0'
+      - name: 'Deploy infra and point the Function App at the new image'
         run: |
-          pwsh '${{ env.AZURE_FUNCTIONAPP_PACKAGE_PATH }}/output/playwright.ps1' install chromium
-
-      - name: 'Run Azure Functions Action'
-        uses: Azure/functions-action@v1
-        id: fa
-        with:
-          app-name: 'flatfinderdev-func'
-          slot-name: 'Production'
-          package: '${{ env.AZURE_FUNCTIONAPP_PACKAGE_PATH }}/output'
-          publish-profile: ${{ secrets.AZUREAPPSERVICE_PUBLISHPROFILE_CF962778F33048C4BAEC25BD0E4AF063 }}
-          sku: 'flexconsumption'
-        
+          az deployment group create \
+            --resource-group ${{ env.RESOURCE_GROUP }} \
+            --template-file infra/main.bicep \
+            --parameters infra/main.bicepparam \
+            --parameters imageTag=${{ github.sha }}
