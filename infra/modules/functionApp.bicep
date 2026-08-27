@@ -178,6 +178,14 @@ resource functionApp 'Microsoft.Web/sites@2024-04-01' = {
           value: serviceBusEndpoint
         }
         {
+          name: 'ServiceBusConnection__credential'
+          value: 'managedidentity'
+        }
+        {
+          name: 'ServiceBusConnection__clientId'
+          value: functionUserManagedIdentityClientId
+        }
+        {
           name: 'FACEBOOK_STATE_BLOB_CONTAINER'
           value: statesContainerName
         }
