@@ -83,8 +83,6 @@ module identity 'modules/identity.bicep' = {
   params: {
     functionUserManagedIdentityName: functionUserManagedIdentityName
     location: location
-    keyVaultName: keyVaultName
-    keyVaultResourceGroupName: keyVaultResourceGroupName
   }
 }
 
