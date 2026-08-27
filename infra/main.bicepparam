@@ -11,7 +11,6 @@ param configContainerName = 'config'
 param seenPostsTableName = 'flatfinderseenposts'
 param serviceBusNamespaceName = 'flatfinder-dev-sbns'
 param serviceBusQueueName = 'flatfinder-dev-sbq'
-
 param functionUserManagedIdentityName = 'flatfinderdev-func-identity'
 param functionAppName = 'flatfinderdev-func'
 param containerAppsEnvironmentName = 'flatfinderdev-cae'
