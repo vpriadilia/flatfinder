@@ -21,12 +21,22 @@ public class PlaywrightPostScraper(IFacebookSessionStateStore stateStore) : IPos
         await using var browser = await playwright.Chromium.LaunchAsync(
             new BrowserTypeLaunchOptions
             {
-                Headless = true
+                Headless = true,
+                Args = ["--disable-blink-features=AutomationControlled"]
             });
         await using var context = await browser.NewContextAsync(new BrowserNewContextOptions
         {
-            StorageState = stateJson
+            StorageState = stateJson,
+            UserAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 " +
+                        "(KHTML, like Gecko) Chrome/141.0.0.0 Safari/537.36",
+            Locale = "sv-SE",
+            TimezoneId = "Europe/Stockholm",
+            ViewportSize = new ViewportSize { Width = 1920, Height = 1080 }
         });
+        // Headless Chromium exposes navigator.webdriver = true, which Facebook checks for
+        // directly; strip it before any page script runs.
+        await context.AddInitScriptAsync(
+            "Object.defineProperty(navigator, 'webdriver', { get: () => undefined });");
 
         var result = new List<RawPost>();
 

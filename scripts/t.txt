@@ -1,0 +1,9 @@
+Get-Process chrome -ErrorAction SilentlyContinue | Stop-Process -Force
+$dst = "$env:TEMP\chrome-debug-profile"
+$src = "$env:LOCALAPPDATA\Google\Chrome\User Data"
+$dst = "$env:TEMP\chrome-debug-profile"
+
+Copy-Item "$env:LOCALAPPDATA\Google\Chrome\User Data" $dst -Recurse -Force
+& "C:\Program Files\Google\Chrome\Application\chrome.exe" --remote-debugging-port=9222 --user-data-dir="$dst"
+node chrome.js
+Remove-Item "$env:TEMP\chrome-debug-profile" -Recurse -Force
